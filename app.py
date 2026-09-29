@@ -11,6 +11,9 @@ from ai_advisor import get_financial_advice
 
 DB_NAME = "finance.db"
 
+# Change this to a private recovery code before running the app.
+RECOVERY_CODE = "CHANGE-ME-TO-A-PRIVATE-RECOVERY-CODE"
+
 
 def create_connection():
     return sqlite3.connect(DB_NAME)
@@ -181,6 +184,21 @@ def change_credentials(
     connection.close()
 
 
+def reset_password(new_password):
+    """Reset only the password; keep the username and finance data."""
+    connection = create_connection()
+    connection.execute(
+        """
+        UPDATE users
+        SET password_hash = ?
+        WHERE id = 1
+        """,
+        (hash_password(new_password),)
+    )
+    connection.commit()
+    connection.close()
+
+
 # =========================================================
 # PROFILE
 # =========================================================
@@ -237,62 +255,96 @@ def login_page():
 
     st.divider()
 
-    left, center, right = st.columns(
-        [1, 1.2, 1]
-    )
+    left, center, right = st.columns([1, 1.2, 1])
 
     with center:
 
-        st.header("🔐 Welcome Back")
+        if st.session_state.get("show_forgot_password", False):
 
-        st.write(
-            "Sign in to access your personal "
-            "finance dashboard."
-        )
+            st.header("🔑 Reset Password")
+            st.write(
+                "Enter your recovery code and choose a new password."
+            )
 
-        username = st.text_input(
-            "Username",
-            placeholder="Enter username"
-        )
-
-        password = st.text_input(
-            "Password",
-            type="password",
-            placeholder="Enter password"
-        )
-
-        if st.button(
-            "🚀 Login",
-            type="primary",
-            use_container_width=True
-        ):
-
-            if verify_login(
-                username.strip(),
-                password
-            ):
-
-                st.session_state.logged_in = True
-
-                st.session_state.username = (
-                    username.strip()
+            with st.form("forgot_password_form"):
+                recovery_code = st.text_input(
+                    "Recovery Code",
+                    type="password"
+                )
+                new_password = st.text_input(
+                    "New Password",
+                    type="password"
+                )
+                confirm_password = st.text_input(
+                    "Confirm New Password",
+                    type="password"
+                )
+                reset_submitted = st.form_submit_button(
+                    "Reset Password",
+                    type="primary",
+                    use_container_width=True
                 )
 
-                st.success(
-                    "Login successful! 🎉"
-                )
+            if reset_submitted:
+                if recovery_code != RECOVERY_CODE:
+                    st.error("Incorrect recovery code.")
+                elif len(new_password) < 8:
+                    st.error("Password must contain at least 8 characters.")
+                elif new_password != confirm_password:
+                    st.error("Passwords do not match.")
+                else:
+                    reset_password(new_password)
+                    st.session_state.show_forgot_password = False
+                    st.success(
+                        "Password reset successfully. You can now log in."
+                    )
 
+            if st.button("← Back to Login", use_container_width=True):
+                st.session_state.show_forgot_password = False
                 st.rerun()
 
-            else:
+        else:
 
-                st.error(
-                    "Invalid username or password."
-                )
+            st.header("🔐 Welcome Back")
 
-        st.caption(
-            "First-time login: admin / 1234"
-        )
+            st.write(
+                "Sign in to access your personal "
+                "finance dashboard."
+            )
+
+            username = st.text_input(
+                "Username",
+                placeholder="Enter username"
+            )
+
+            password = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Enter password"
+            )
+
+            if st.button(
+                "🚀 Login",
+                type="primary",
+                use_container_width=True
+            ):
+
+                if verify_login(username.strip(), password):
+                    st.session_state.logged_in = True
+                    st.session_state.username = username.strip()
+                    st.success("Login successful! 🎉")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+
+            if st.button(
+                "Forgot Password?",
+                use_container_width=True
+            ):
+                st.session_state.show_forgot_password = True
+                st.rerun()
+
+            st.caption("First-time login: admin / 1234")
 
 
 # =========================================================
@@ -1457,10 +1509,10 @@ Category-wise Expenses:
                     "Password cannot be empty."
                 )
 
-            elif len(new_password) < 4:
+            elif len(new_password) < 8:
 
                 st.error(
-                    "Password must contain at least 4 characters."
+                    "Password must contain at least 8 characters."
                 )
 
             elif new_password != confirm_password:
